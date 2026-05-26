@@ -1,32 +1,23 @@
-// --- 1. SET UP KINDS ---
-namespace SpriteKind {
-    export const UI = SpriteKind.create()
-    export const Shockwave = SpriteKind.create()
-    export const Upgrade = SpriteKind.create()
-    export const Boss = SpriteKind.create()
-    export const Platform = SpriteKind.create()
-    export const Coin = SpriteKind.create()
-    export const Blockade = SpriteKind.create()
-    export const Hazard = SpriteKind.create()    // For the Water
-    export const Decoration = SpriteKind.create() // For Background Mountains
-}
-
-// --- 2. GLOBAL VARIABLES & CONSTANTS ---
-const GROUND_Y = 110
-const MAX_CHARGE = 100
-const GRAVITY = 1000
-
 let charge = 0
 let isSlamming = false
 let isCharging = false
-let hasShockwave = false
-let bossHP = 5
+let isCutscene = false
+let cutsceneDone = false
 let spawnX = 20
-let coins = 0
 
-scene.setBackgroundColor(9) // Sky Blue
+const MAX_CHARGE = 100
+const GRAVITY = 1000
 
-// --- 3. PLAYER SETUP ---
+// Fixed Namespace: Removed 'Enemy' because it's built-in
+namespace SpriteKind {
+    export const UI = SpriteKind.create()
+    export const Platform = SpriteKind.create()
+    export const Sign = SpriteKind.create()
+}
+
+scene.setBackgroundColor(6) // Teal/Blue sky color
+
+// --- PLAYER ---
 let player = sprites.create(img`
     . . . . 8 8 8 8 . . . . 
     . . . 8 9 9 9 9 8 . . . 
@@ -42,157 +33,170 @@ let player = sprites.create(img`
 player.ay = GRAVITY
 player.z = 10
 
+// --- MONSTER ---
+let monster = sprites.create(img`
+    . . . . . . . . . . . . . . . . 
+    . . . . . . . 2 2 2 2 2 . . . . 
+    . . . . . . 2 2 2 2 2 2 2 . . . 
+    . . . . . 2 2 f 2 2 2 f 2 2 . . 
+    . . . . 2 2 2 2 2 2 2 2 2 2 2 . 
+    . . . 2 2 2 2 f f f f f 2 2 2 . 
+    . . . 2 2 2 f 2 2 2 2 2 f 2 2 . 
+    . . . 2 2 2 2 2 2 2 2 2 2 2 2 . 
+    . . . 2 2 2 2 2 2 2 2 2 2 2 2 . 
+    . . . . 2 2 2 2 2 2 2 2 2 2 . . 
+    . . . . . . 2 2 2 2 2 . . . . . 
+`, SpriteKind.Enemy) // Using built-in SpriteKind.Enemy
+monster.ay = GRAVITY
+monster.scale = 1.5
+
 // UI Meter
-let meterImg = image.create(52, 10)
-let meterSprite = sprites.create(meterImg, SpriteKind.UI)
+let meterSprite = sprites.create(image.create(52, 10), SpriteKind.UI)
 meterSprite.setFlag(SpriteFlag.RelativeToCamera, true)
 meterSprite.setPosition(80, 12)
-meterSprite.z = 100
 
 function respawnPlayer() {
     player.setPosition(spawnX, 20)
-    player.vx = 0
-    player.vy = 0
-    charge = 0
-    isSlamming = false
-    isCharging = false
+    player.vx = 0; player.vy = 0
+    charge = 0; isSlamming = false; isCharging = false; isCutscene = false
     controller.moveSprite(player, 100, 0)
 }
 
-// --- 4. WORLD BUILDING ---
-function createPlatform(x: number, y: number, width: number, height: number, color: number = 14) {
+function createPlatform(x: number, y: number, width: number, height: number) {
     let platImg = image.create(width, height)
-    platImg.fill(color)
-    // Add grass if it's a standard dirt platform
-    if (color == 14) {
-        platImg.fillRect(0, 0, width, 4, 7)
-        platImg.fillRect(0, 4, width, 1, 6)
-    }
+    platImg.fill(13) // Tan/Rock color like your image
     let plat = sprites.create(platImg, SpriteKind.Platform)
-    plat.left = x
-    plat.top = y
+    plat.left = x; plat.top = y
     return plat
 }
 
-function buildLevel() {
-    // Background Scenery (Mountains)
-    for (let i = 0; i < 10; i++) {
-        let mtn = sprites.create(img`
-            . . . . . . . . . . . . . . . . 
-            . . . . . . . f f f . . . . . . 
-            . . . . . . f f f f f . . . . . 
-            . . . . . f f f f f f f . . . . 
-            . . . . f f f f f f f f f . . . 
-            . . . f f f f f f f f f f f . . 
-            . . f f f f f f f f f f f f f . 
-        `, SpriteKind.Decoration)
-        mtn.setPosition(i * 180, 90)
-        mtn.scale = 8
-        mtn.z = -10
-    }
+function buildWorld() {
+    // Starting Stairs
+    createPlatform(0, 110, 80, 40)
+    createPlatform(80, 95, 40, 60)
+    createPlatform(120, 80, 40, 80)
+    createPlatform(160, 65, 40, 100)
+    createPlatform(200, 50, 60, 150)
 
-    // THE STAIRS (3 doable jumps)
-    createPlatform(0, GROUND_Y, 80, 40)   // Start
-    createPlatform(100, 95, 40, 60)       // Stair 1
-    createPlatform(160, 80, 40, 80)       // Stair 2
-    createPlatform(220, 65, 40, 100)      // Stair 3 (Final Prep)
+    // First Cliff (Now reachable)
+    createPlatform(260, -20, 100, 250)
 
-    // THE PIT (Water Hazard)
-    let water = sprites.create(image.create(250, 20), SpriteKind.Hazard)
-    water.image.fill(6)
-    water.left = 260
-    water.top = 115
+    // Floating Mountain Climb 
+    createPlatform(380, -50, 40, 10)
+    createPlatform(440, -100, 40, 10)
+    createPlatform(500, -150, 40, 10)
 
-    // THE TALL MOUNTAIN (Only the top is visible)
-    // Positioned so only a Charge Jump can reach it
-    createPlatform(520, 25, 80, 200, 13) // Grey Rock Peak
+    // PHASE 2: Long Monster Platform
+    createPlatform(580, -180, 600, 400)
 
-    // Phase 2 Entry
-    createPlatform(680, 110, 400, 40)
+    // THE LONG POLE & ESCAPE CLIFF
+    // The pole is a thin vertical wall that stops the monster
+    createPlatform(1180, -350, 10, 250)
+    createPlatform(1190, -350, 300, 400)
 
-    // Coin on the peak
-    let coinImg = img`. 5 5 . 5 f 5 . 5 5 .`
-    sprites.create(coinImg, SpriteKind.Coin).setPosition(560, 10)
+    monster.setPosition(850, -200)
 }
 
-buildLevel()
-respawnPlayer()
+buildWorld(); respawnPlayer()
 
-// --- 5. PHYSICS & CONTROLS ---
-function checkIsGrounded(): boolean {
+function startCliffCutscene() {
+    if (cutsceneDone || isCutscene) return
+    isCutscene = true; cutsceneDone = true
+    player.vx = 0; controller.moveSprite(player, 0, 0)
+    control.runInParallel(function () {
+        pause(1500)
+        isCutscene = false
+        controller.moveSprite(player, 100, 0)
+    })
+}
+
+function checkIsGrounded(sprite: Sprite): boolean {
     for (let p of sprites.allOfKind(SpriteKind.Platform)) {
-        if (player.right > p.left && player.left < p.right) {
-            if (player.bottom >= p.top - 2 && player.bottom <= p.top + 8) return true
+        if (sprite.right > p.left && sprite.left < p.right) {
+            if (sprite.bottom >= p.top - 2 && sprite.bottom <= p.top + 8) return true
         }
     }
     return false
 }
 
+// --- CONTROLS ---
 controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
-    if (checkIsGrounded() && !isCharging) {
-        player.vy = -240 // Base Jump
-    }
+    if (!isCutscene && checkIsGrounded(player) && !isCharging) player.vy = -240
 })
 
 controller.down.onEvent(ControllerButtonEvent.Pressed, function () {
-    if (!checkIsGrounded()) {
-        isSlamming = true
-        player.vy = 800
-        controller.moveSprite(player, 0, 0)
+    if (!isCutscene && !checkIsGrounded(player)) {
+        isSlamming = true; player.vy = 800; controller.moveSprite(player, 0, 0)
     }
 })
 
 controller.down.onEvent(ControllerButtonEvent.Released, function () {
     if (isCharging) {
-        player.vy = -350 - (500 * (charge / MAX_CHARGE))
-        isCharging = false; charge = 0; controller.moveSprite(player, 100, 0)
+        player.vy = -350 - (450 * (charge / MAX_CHARGE))
+        isCharging = false; charge = 0
+        if (!isCutscene) controller.moveSprite(player, 100, 0)
     } else if (isSlamming) {
-        isSlamming = false; controller.moveSprite(player, 100, 0)
+        isSlamming = false
+        if (!isCutscene) controller.moveSprite(player, 100, 0)
     }
 })
 
-// --- 6. GAME LOOP ---
+// --- MAIN LOOP ---
+let camY = 60
 game.onUpdate(function () {
-    // Fixed Camera logic
-    scene.centerCameraAt(player.x + 30, 60)
+    let targetCamY = player.y - 20
+    if (isCutscene) targetCamY = -50
 
-    // Collision Logic
-    let onFloor = false
-    for (let s of sprites.allOfKind(SpriteKind.Platform)) {
-        if (player.overlapsWith(s)) {
-            if (player.vy >= 0 && player.bottom <= s.top + 12) {
-                player.bottom = s.top; player.vy = 0; onFloor = true
+    camY = (camY * 15 + targetCamY) / 16
+    scene.centerCameraAt(player.x + 40, camY)
+
+    if (player.x > 210 && player.x < 240 && !cutsceneDone) startCliffCutscene()
+
+    // Player Collision
+    let currentlyOnPlat = false
+    for (let p of sprites.allOfKind(SpriteKind.Platform)) {
+        if (player.overlapsWith(p)) {
+            if (player.vy >= 0 && player.bottom <= p.top + 15) {
+                player.bottom = p.top; player.vy = 0; currentlyOnPlat = true
             } else {
-                if (player.x < s.x) player.right = s.left; else player.left = s.right
+                if (player.x < p.x) player.right = p.left; else player.left = p.right
             }
         }
     }
 
-    if (onFloor) {
+    // Monster AI with Acceleration (Physics-based)
+    if (Math.abs(player.y - monster.y) < 150) {
+        monster.ax = (player.x > monster.x) ? 140 : -140
+    } else {
+        monster.ax = 0; monster.vx *= 0.9
+    }
+    monster.vx = Math.clamp(-70, 70, monster.vx)
+
+    // Monster Collision & Gravity
+    for (let p of sprites.allOfKind(SpriteKind.Platform)) {
+        if (monster.overlapsWith(p)) {
+            if (monster.vy >= 0 && monster.bottom <= p.top + 15) {
+                monster.bottom = p.top; monster.vy = 0
+            } else {
+                if (monster.x < p.x) { monster.right = p.left; monster.vx = 0 }
+                else { monster.left = p.right; monster.vx = 0 }
+            }
+        }
+    }
+
+    if (currentlyOnPlat) {
         if (isSlamming) {
             isSlamming = false; isCharging = true; scene.cameraShake(4, 200)
-        } else if (!isCharging) {
+        } else if (!isCharging && !isCutscene) {
             controller.moveSprite(player, 100, 0)
         }
     }
 
     if (isCharging) charge = Math.min(MAX_CHARGE, charge + 5)
-
-    // Hazard Check
-    for (let h of sprites.allOfKind(SpriteKind.Hazard)) {
-        if (player.overlapsWith(h)) {
-            game.splash("Watch out for the water!")
-            respawnPlayer()
-        }
-    }
-
-    if (player.y > 200) respawnPlayer()
+    if (player.y > 600) respawnPlayer()
+    if (player.overlapsWith(monster)) respawnPlayer()
 
     // UI Update
     meterSprite.image.fill(0); meterSprite.image.fillRect(0, 0, 52, 10, 15)
-    meterSprite.image.fillRect(1, 1, 50, 8, 1)
-    meterSprite.image.fillRect(1, 1, (charge / MAX_CHARGE) * 50, 8, 9)
-    meterSprite.image.print("C:" + coins, 2, 2, 15)
+    meterSprite.image.fillRect(1, 1, 50, 8, 1); meterSprite.image.fillRect(1, 1, (charge / MAX_CHARGE) * 50, 8, 9)
 })
-
-sprites.onOverlap(SpriteKind.Player, SpriteKind.Coin, (p, c) => { coins++; c.destroy() })
