@@ -3,19 +3,23 @@ let isSlamming = false
 let isCharging = false
 let isCutscene = false
 let cutsceneDone = false
-let spawnX = 20
 
 const MAX_CHARGE = 100
 const GRAVITY = 1000
 
-// Fixed Namespace: Removed 'Enemy' because it's built-in
+// Checkpoint System
+let checkpointX = 20
+let checkpointY = 20
+
 namespace SpriteKind {
     export const UI = SpriteKind.create()
     export const Platform = SpriteKind.create()
     export const Sign = SpriteKind.create()
+    export const Coin = SpriteKind.create()
 }
 
-scene.setBackgroundColor(6) // Teal/Blue sky color
+scene.setBackgroundColor(9)
+info.setScore(0)
 
 // --- PLAYER ---
 let player = sprites.create(img`
@@ -33,52 +37,85 @@ let player = sprites.create(img`
 player.ay = GRAVITY
 player.z = 10
 
-// --- MONSTER ---
-let monster = sprites.create(img`
-    . . . . . . . . . . . . . . . . 
-    . . . . . . . 2 2 2 2 2 . . . . 
-    . . . . . . 2 2 2 2 2 2 2 . . . 
-    . . . . . 2 2 f 2 2 2 f 2 2 . . 
-    . . . . 2 2 2 2 2 2 2 2 2 2 2 . 
-    . . . 2 2 2 2 f f f f f 2 2 2 . 
-    . . . 2 2 2 f 2 2 2 2 2 f 2 2 . 
-    . . . 2 2 2 2 2 2 2 2 2 2 2 2 . 
-    . . . 2 2 2 2 2 2 2 2 2 2 2 2 . 
-    . . . . 2 2 2 2 2 2 2 2 2 2 . . 
-    . . . . . . 2 2 2 2 2 . . . . . 
-`, SpriteKind.Enemy) // Using built-in SpriteKind.Enemy
-monster.ay = GRAVITY
-monster.scale = 1.5
+// --- ENEMIES ARRAY ---
+let enemies: Sprite[] = []
+let enemySpawnsX: number[] = []
+let enemySpawnsY: number[] = []
+let enemyMinX: number[] = []
+let enemyMaxX: number[] = []
+
+function createMonster(x: number, y: number, minX: number, maxX: number) {
+    let m = sprites.create(img`
+        . . . . . . . . . . . . . . . . 
+        . . . . . . . 2 2 2 2 2 . . . . 
+        . . . . . . 2 2 2 2 2 2 2 . . . 
+        . . . . . 2 2 f 2 2 2 f 2 2 . . 
+        . . . . 2 2 2 2 2 2 2 2 2 2 2 . 
+        . . . 2 2 2 2 f f f f f 2 2 2 . 
+        . . . 2 2 2 f 2 2 2 2 2 f 2 2 . 
+        . . . 2 2 2 2 2 2 2 2 2 2 2 2 . 
+        . . . 2 2 2 2 2 2 2 2 2 2 2 2 . 
+        . . . . 2 2 2 2 2 2 2 2 2 2 . . 
+        . . . . . . 2 2 2 2 2 . . . . . 
+    `, SpriteKind.Enemy)
+    m.ay = GRAVITY
+    m.scale = 1.5
+    m.setPosition(x, y)
+    enemies.push(m)
+    enemySpawnsX.push(x)
+    enemySpawnsY.push(y)
+    enemyMinX.push(minX)
+    enemyMaxX.push(maxX)
+}
 
 // UI Meter
 let meterSprite = sprites.create(image.create(52, 10), SpriteKind.UI)
 meterSprite.setFlag(SpriteFlag.RelativeToCamera, true)
 meterSprite.setPosition(80, 12)
 
-function respawnPlayer() {
-    player.setPosition(spawnX, 20)
+function respawn() {
+    player.setPosition(checkpointX, checkpointY)
     player.vx = 0; player.vy = 0
     charge = 0; isSlamming = false; isCharging = false; isCutscene = false
+
+    // Reset all monsters to their exact starting points
+    for (let i = 0; i < enemies.length; i++) {
+        enemies[i].setPosition(enemySpawnsX[i], enemySpawnsY[i])
+        enemies[i].vx = 0
+    }
     controller.moveSprite(player, 100, 0)
 }
 
 function createPlatform(x: number, y: number, width: number, height: number) {
     let platImg = image.create(width, height)
-    platImg.fill(13) // Tan/Rock color like your image
+    platImg.fill(14)
     let plat = sprites.create(platImg, SpriteKind.Platform)
     plat.left = x; plat.top = y
     return plat
 }
 
+function createCoin(x: number, y: number) {
+    let coin = sprites.create(img`
+        . . 5 5 5 5 . . 
+        . 5 5 5 5 5 5 . 
+        5 5 4 5 5 4 5 5 
+        5 5 4 5 5 4 5 5 
+        5 5 5 5 5 5 5 5 
+        . 5 5 5 5 5 5 . 
+        . . 5 5 5 5 . . 
+    `, SpriteKind.Coin)
+    coin.setPosition(x, y)
+}
+
 function buildWorld() {
-    // Starting Stairs
+    // Starting Stairs 
     createPlatform(0, 110, 80, 40)
     createPlatform(80, 95, 40, 60)
     createPlatform(120, 80, 40, 80)
     createPlatform(160, 65, 40, 100)
     createPlatform(200, 50, 60, 150)
 
-    // First Cliff (Now reachable)
+    // First Cliff 
     createPlatform(260, -20, 100, 250)
 
     // Floating Mountain Climb 
@@ -86,18 +123,40 @@ function buildWorld() {
     createPlatform(440, -100, 40, 10)
     createPlatform(500, -150, 40, 10)
 
-    // PHASE 2: Long Monster Platform
-    createPlatform(580, -180, 600, 400)
+    // --- PHASE 2: Main Chase ---
+    createPlatform(580, -180, 550, 400)
+    createMonster(850, -200, 580, 1100)
 
-    // THE LONG POLE & ESCAPE CLIFF
-    // The pole is a thin vertical wall that stops the monster
-    createPlatform(1180, -350, 10, 250)
-    createPlatform(1190, -350, 300, 400)
+    // Evasion Platforms & Coins
+    createPlatform(750, -250, 40, 10); createCoin(750, -265)
+    createPlatform(850, -300, 40, 10); createCoin(850, -315)
+    createPlatform(950, -250, 40, 10); createCoin(950, -265)
 
-    monster.setPosition(850, -200)
+    // THE POLE (Phase 2)
+    createPlatform(1100, -250, 16, 70)
+
+    // ESCAPE CLIFF 
+    createPlatform(1130, -180, 150, 400)
+
+    // --- PHASE 3: FLOATING GAUNTLET ---
+
+    // Floating Platform 1
+    createPlatform(1330, -250, 240, 20)
+    createPlatform(1432, -320, 16, 70) // Pillar
+    createMonster(1500, -270, 1448, 1570) // Monster on the right side of pillar
+
+    // Floating Platform 2 (Steps up)
+    createPlatform(1630, -320, 240, 20)
+    createPlatform(1732, -390, 16, 70) // Pillar
+    createMonster(1800, -340, 1748, 1870) // Monster on the right side of pillar
+
+    // Floating Platform 3 (Steps up again)
+    createPlatform(1930, -390, 240, 20)
+    createPlatform(2032, -460, 16, 70) // Pillar
+    createMonster(2100, -410, 2048, 2170) // Monster on the right side of pillar
 }
 
-buildWorld(); respawnPlayer()
+buildWorld(); respawn()
 
 function startCliffCutscene() {
     if (cutsceneDone || isCutscene) return
@@ -141,6 +200,12 @@ controller.down.onEvent(ControllerButtonEvent.Released, function () {
     }
 })
 
+// --- COIN COLLECTION ---
+sprites.onOverlap(SpriteKind.Player, SpriteKind.Coin, function (sprite, otherSprite) {
+    otherSprite.destroy()
+    info.changeScoreBy(1)
+})
+
 // --- MAIN LOOP ---
 let camY = 60
 game.onUpdate(function () {
@@ -152,11 +217,18 @@ game.onUpdate(function () {
 
     if (player.x > 210 && player.x < 240 && !cutsceneDone) startCliffCutscene()
 
-    // Player Collision
+    // --- CHECKPOINT UPDATES ---
+    if (player.x > 520 && checkpointX < 520) { checkpointX = 520; checkpointY = -170 }
+    if (player.x > 1130 && checkpointX < 1130) { checkpointX = 1150; checkpointY = -200 }
+    if (player.x > 1330 && checkpointX < 1330) { checkpointX = 1350; checkpointY = -270 }
+    if (player.x > 1630 && checkpointX < 1630) { checkpointX = 1650; checkpointY = -340 }
+    if (player.x > 1930 && checkpointX < 1930) { checkpointX = 1950; checkpointY = -410 }
+
+    // Player Collision 
     let currentlyOnPlat = false
     for (let p of sprites.allOfKind(SpriteKind.Platform)) {
         if (player.overlapsWith(p)) {
-            if (player.vy >= 0 && player.bottom <= p.top + 15) {
+            if (player.vy >= 0 && player.bottom <= p.top + 10) {
                 player.bottom = p.top; player.vy = 0; currentlyOnPlat = true
             } else {
                 if (player.x < p.x) player.right = p.left; else player.left = p.right
@@ -164,24 +236,40 @@ game.onUpdate(function () {
         }
     }
 
-    // Monster AI with Acceleration (Physics-based)
-    if (Math.abs(player.y - monster.y) < 150) {
-        monster.ax = (player.x > monster.x) ? 140 : -140
-    } else {
-        monster.ax = 0; monster.vx *= 0.9
-    }
-    monster.vx = Math.clamp(-70, 70, monster.vx)
+    // Dynamic AI & Hard Boundaries for ALL Enemies
+    for (let i = 0; i < enemies.length; i++) {
+        let m = enemies[i]
 
-    // Monster Collision & Gravity
-    for (let p of sprites.allOfKind(SpriteKind.Platform)) {
-        if (monster.overlapsWith(p)) {
-            if (monster.vy >= 0 && monster.bottom <= p.top + 15) {
-                monster.bottom = p.top; monster.vy = 0
-            } else {
-                if (monster.x < p.x) { monster.right = p.left; monster.vx = 0 }
-                else { monster.left = p.right; monster.vx = 0 }
+        // AI Chase Logic
+        if (Math.abs(player.y - m.y) < 150 && Math.abs(player.x - m.x) < 250) {
+            m.ax = (player.x > m.x) ? 140 : -140
+        } else {
+            m.ax = 0; m.vx *= 0.9
+        }
+        m.vx = Math.clamp(-70, 70, m.vx)
+
+        // Map Boundaries
+        if (m.left < enemyMinX[i]) {
+            m.left = enemyMinX[i]; m.vx = 0
+        }
+        if (m.right > enemyMaxX[i]) {
+            m.right = enemyMaxX[i]; m.vx = 0
+        }
+
+        // Monster Platform Collision
+        for (let p of sprites.allOfKind(SpriteKind.Platform)) {
+            if (m.overlapsWith(p)) {
+                if (m.vy >= 0 && m.bottom <= p.top + 15) {
+                    m.bottom = p.top; m.vy = 0
+                } else {
+                    if (m.x < p.x) { m.right = p.left; m.vx = 0 }
+                    else { m.left = p.right; m.vx = 0 }
+                }
             }
         }
+
+        // Catch Condition
+        if (player.overlapsWith(m)) respawn()
     }
 
     if (currentlyOnPlat) {
@@ -193,8 +281,7 @@ game.onUpdate(function () {
     }
 
     if (isCharging) charge = Math.min(MAX_CHARGE, charge + 5)
-    if (player.y > 600) respawnPlayer()
-    if (player.overlapsWith(monster)) respawnPlayer()
+    if (player.y > 600) respawn()
 
     // UI Update
     meterSprite.image.fill(0); meterSprite.image.fillRect(0, 0, 52, 10, 15)
